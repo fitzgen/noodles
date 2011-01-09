@@ -31,9 +31,8 @@
 
 (function (exports) {
 
-    var slice, noodles;
-
-    slice = Array.prototype.slice;
+    var slice = Array.prototype.slice,
+        noodles;
 
     function curry (fn) {
         var args = slice.call(arguments, 1);
