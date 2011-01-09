@@ -29,6 +29,16 @@
 // noodles.js -- Asynchronous, non-blocking, continuation-passing-style versions
 // of the common higher order functions in Array.prototype.
 
+// TODO:
+//
+// * Remove try/catch blocks.
+//
+// * Prevent against infinite loops in reduce when using async after 50ms.
+//
+// * Refactor to avoid copying items in reduce.
+//
+// * Refactor and put public interface at bottom.
+
 (function (exports) {
 
     var slice = Array.prototype.slice,
