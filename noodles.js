@@ -79,7 +79,7 @@
     //         console.log("The sum is " + sum);
     //     }, 0);
     function reduce (items, iterFn, callback, initial) {
-        var start;
+        var start, iteratedOnce = false;
         callback = callback || function () {};
 
         // Be sure to make a copy of the `items` using `.concat()` so that
@@ -87,19 +87,22 @@
         // this function.
         items = typeof initial !== "undefined"
             ? [initial].concat(items)
-            : [].concat(items);
+            : slice.call(items);
 
         start = +new Date();
 
         function next (res) {
-            if ( (+new Date()) - start > exports.noodles.BATCH_TIME ) {
+            if ( (+new Date()) - start > exports.noodles.BATCH_TIME
+                 && iteratedOnce ) {
                 // Keep from blocking if we run longer than 50ms.
                 async(function () {
                     start = +new Date();
+                    iteratedOnce = false;
                     next(res);
                 });
             } else {
                 if ( items.length > 0 ) {
+                    iteratedOnce = true;
                     iterFn.call(res, res, items.shift(), next, function (res) {
                         callback.call(res, res);
                     });
