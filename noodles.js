@@ -241,19 +241,15 @@
                 return next(!!o);
             };
         }
-        try {
-            noodles.reduce(items, function (_, it, next, exit) {
-                testFn.call(it, it, function (res) {
-                    if (res) {
-                        next(true);
-                    } else {
-                        exit(false);
-                    }
-                });
-            }, callback, true);
-        } catch (e) {
-            async(function () { callback(true); });
-        }
+        noodles.reduce(items, function (_, it, next, exit) {
+            testFn.call(it, it, function (res) {
+                if (res) {
+                    next(true);
+                } else {
+                    exit(false);
+                }
+            });
+        }, callback, true);
     };
 
     // Does `iterFn(item)` return a truthy value for at least one item in
@@ -267,19 +263,15 @@
                 return next(!!o);
             };
         }
-        try {
-            noodles.reduce(items, function (_, it, next, exit) {
-                testFn.call(it, it, function (res) {
-                    if (res) {
-                        exit(true);
-                    } else {
-                        next(false);
-                    }
-                });
-            }, callback, false);
-        } catch (e) {
-            async(function () { callback(false); });
-        }
+        noodles.reduce(items, function (_, it, next, exit) {
+            testFn.call(it, it, function (res) {
+                if (res) {
+                    exit(true);
+                } else {
+                    next(false);
+                }
+            });
+        }, callback, false);
     };
 
 }(typeof exports === "object"
