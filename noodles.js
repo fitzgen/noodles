@@ -41,31 +41,10 @@
 
 (function (exports) {
 
-    var slice = Array.prototype.slice,
-        noodles;
-
-    function curry (fn) {
-        var args = slice.call(arguments, 1);
-        return function () {
-            return fn.apply(this, args.concat(slice.call(arguments)));
-        };
-    }
-
-    // Globally exposed function. Can access the functions like
-    // `noodles(items).map(...)` or like `noodles.map(items, ...)`.
-    noodles = exports.noodles = function (items) {
-        return {
-            reduce: curry(noodles.reduce, items),
-            map: curry(noodles.map, items),
-            filter: curry(noodles.filter, items),
-            forEach: curry(noodles.forEach, items),
-            every: curry(noodles.every, items),
-            some: curry(noodles.some, items)
-        };
-    };
+    var slice = Array.prototype.slice;
 
     function async (fn) {
-        setTimeout(fn, 15);
+        setTimeout(fn, exports.noodles.TIMEOUT);
     }
 
     // `noodles.reduce` applies `iterFn` across each item in `items` from left
@@ -99,7 +78,7 @@
     //     }, function (sum) {
     //         console.log("The sum is " + sum);
     //     }, 0);
-    noodles.reduce = function (items, iterFn, callback, initial) {
+    function reduce (items, iterFn, callback, initial) {
         var start;
         callback = callback || function () {};
 
@@ -113,7 +92,7 @@
         start = +new Date();
 
         function next (res) {
-            if ( (+new Date()) - start > 50 ) {
+            if ( (+new Date()) - start > exports.noodles.BATCH_TIME ) {
                 // Keep from blocking if we run longer than 50ms.
                 async(function () {
                     start = +new Date();
@@ -137,7 +116,7 @@
                 next(items.shift());
             });
         }
-    };
+    }
 
     // Create a new array with the results of calling `iterFn` on each of the
     // `items`. The order of `items` and their execution is preserved.
@@ -153,19 +132,19 @@
     //     }, function (fileBodies) {
     //         ...
     //     });
-    noodles.map = function (items, iterFn, callback) {
-        noodles.reduce(items, function (xs, x, next) {
+    function map (items, iterFn, callback) {
+        reduce(items, function (xs, x, next) {
             iterFn.call(x, x, function (res) {
                 next(xs.concat(res));
             });
         }, callback, []);
-    };
+    }
 
     // Create a new array which consists of only each item in `items` for which
     // `testFn(item)` is truthy. The order of `items` and execution is
     // preserved.
-    noodles.filter = function (items, testFn, callback) {
-        noodles.reduce(items, function (xs, x, next) {
+    function filter (items, testFn, callback) {
+        reduce(items, function (xs, x, next) {
             testFn.call(x, x, function (res) {
                 if (res) {
                     next(xs.concat(x));
@@ -174,7 +153,7 @@
                 }
             });
         }, callback, []);
-    };
+    }
 
     // Call `iterFn(item)` for each item in `items` (presumably for side
     // effects). The order of items and execution is preserved.
@@ -196,14 +175,14 @@
     //     }, function () {
     //         ...
     //     });
-    noodles.forEach = function (items, iterFn, callback) {
+    function forEach (items, iterFn, callback) {
         var i = 0;
-        noodles.reduce(items, function (_, it, next, exit) {
+        reduce(items, function (_, it, next, exit) {
             iterFn.call(it, it, i++, next, exit);
         }, function () {
             callback.call(items, items);
         }, null);
-    };
+    }
 
     // TODO: some and every share a horrible amount of code. Need to come back
     // and clean them up and make them share.
@@ -234,14 +213,14 @@
     //             console.log("Oh noes! Not all of my fave sites are up!");
     //         }
     //     });
-    noodles.every = function (items, testFn, callback) {
+    function every (items, testFn, callback) {
         if ( arguments.length < 3) {
             callback = testFn || function () {};
             testFn = function (o, next) {
                 return next(!!o);
             };
         }
-        noodles.reduce(items, function (_, it, next, exit) {
+        reduce(items, function (_, it, next, exit) {
             testFn.call(it, it, function (res) {
                 if (res) {
                     next(true);
@@ -250,20 +229,20 @@
                 }
             });
         }, callback, true);
-    };
+    }
 
     // Does `iterFn(item)` return a truthy value for at least one item in
     // `items`?  Note that when the array is empty, there is no item in `items`
     // for which `testFn(item)` is true and so the result of calling
     // `noodles.some` on an empty array is false.
-    noodles.some = function (items, testFn, callback) {
+    function some (items, testFn, callback) {
         if ( arguments.length < 3) {
             callback = testFn || function () {};
             testFn = function (o, next) {
                 return next(!!o);
             };
         }
-        noodles.reduce(items, function (_, it, next, exit) {
+        reduce(items, function (_, it, next, exit) {
             testFn.call(it, it, function (res) {
                 if (res) {
                     exit(true);
@@ -272,7 +251,31 @@
                 }
             });
         }, callback, false);
+    }
+
+    function curry (fn) {
+        var args = slice.call(arguments, 1);
+        return function () {
+            return fn.apply(this, args.concat(slice.call(arguments)));
+        };
+    }
+
+    // Globally exposed function. Can access the functions like
+    // `noodles(items).map(...)` or like `noodles.map(items, ...)`.
+    exports.noodles = function (items) {
+        return {
+            reduce: curry(reduce, items),
+            map: curry(map, items),
+            filter: curry(filter, items),
+            forEach: curry(forEach, items),
+            every: curry(every, items),
+            some: curry(some, items)
+        };
     };
+
+    exports.noodles.TIMEOUT = 15;
+
+    exports.noodles.BATCH_TIME = 50;
 
 }(typeof exports === "object"
   ? exports
