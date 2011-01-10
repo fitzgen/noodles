@@ -276,6 +276,13 @@
         };
     };
 
+    exports.noodles.reduce = reduce;
+    exports.noodles.map = map;
+    exports.noodles.filter = filter;
+    exports.noodles.forEach = forEach;
+    exports.noodles.every = every;
+    exports.noodles.some = some;
+
     exports.noodles.TIMEOUT = 15;
 
     exports.noodles.BATCH_TIME = 50;
