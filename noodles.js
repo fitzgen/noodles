@@ -29,16 +29,6 @@
 // noodles.js -- Asynchronous, non-blocking, continuation-passing-style versions
 // of the common higher order functions in Array.prototype.
 
-// TODO:
-//
-// * Remove try/catch blocks.
-//
-// * Prevent against infinite loops in reduce when using async after 50ms.
-//
-// * Refactor to avoid copying items in reduce.
-//
-// * Refactor and put public interface at bottom.
-
 (function (exports) {
 
     var slice = Array.prototype.slice;
@@ -47,9 +37,9 @@
         setTimeout(fn, exports.noodles.TIMEOUT);
     }
 
-    // `noodles.reduce` applies `iterFn` across each item in `items` from left
-    // to right, accumulating the results. All the other functions provided by
-    // `noodles` are based upon this one. It takes the following arguments:
+    // `reduce` applies `iterFn` across each item in `items` from left to right,
+    // accumulating the results. All the other functions provided by `noodles`
+    // are based upon this one. It takes the following arguments:
     //
     //   * `items`: Array of items to reduce.
     //
@@ -70,53 +60,54 @@
     //     empty. This is optional, so long as items is not empty. If it is not
     //     provided, than the first element in items becomes the initial value.
     //
-    // Here is an example use of `noodles.reduce` to find the sum of the numbers
-    // in an array and log them to the console:
+    // Here is an example use of `reduce` to find the sum of the numbers in an
+    // array and log them to the console:
     //
-    //     noodles.reduce([1,2,3,4,5,6,7,8,9,10], function (sum, n, next, exit) {
+    //     noodles([1,2,3,4,5,6,7,8,9,10]).reduce(function (sum, n, next, exit) {
     //         next(sum + n);
     //     }, function (sum) {
     //         console.log("The sum is " + sum);
     //     }, 0);
-    function reduce (items, iterFn, callback, initial) {
-        var start, iteratedOnce = false;
+    function reduce (iterFn, callback, initial) {
         callback = callback || function () {};
+        var items = this.items,
+            length = this.items.length,
+            start = +new Date(),
+            i = 0,
+            iteratedOnce = false;
 
-        // Be sure to make a copy of the `items` using `.concat()` so that
-        // `.shift()` does not accidentally have side effects visible outside
-        // this function.
-        items = typeof initial !== "undefined"
-            ? [initial].concat(items)
-            : slice.call(items);
-
-        start = +new Date();
-
-        function next (res) {
+        function next (accumulation) {
             if ( (+new Date()) - start > exports.noodles.BATCH_TIME
                  && iteratedOnce ) {
                 // Keep from blocking if we run longer than 50ms.
                 async(function () {
                     start = +new Date();
                     iteratedOnce = false;
-                    next(res);
+                    next(accumulation);
                 });
             } else {
-                if ( items.length > 0 ) {
+                if ( i < length ) {
                     iteratedOnce = true;
-                    iterFn.call(res, res, items.shift(), next, function (res) {
-                        callback.call(res, res);
-                    });
+                    iterFn.call(accumulation,
+                                accumulation,
+                                items[i++],
+                                next,
+                                function (accumulation) {
+                                    callback.call(accumulation, accumulation);
+                                });
                 } else {
-                    callback.call(res, res);
+                    callback.call(accumulation, accumulation);
                 }
             }
         }
 
         if ( items.length === 0 ) {
-            throw new TypeError("noodles.reduce on empty array with no initial value.");
+            throw new TypeError("noodles: reduce on empty array with no initial value.");
         } else {
             async(function () {
-                next(items.shift());
+                next(typeof initial !== "undefined"
+                     ? initial
+                     : items[i++]);
             });
         }
     }
@@ -127,7 +118,7 @@
     // Example using node's `fs` module:
     //
     //     var fs = require("fs");
-    //     noodles.map(["a.txt", "b.txt", "c.txt"], function (file, next) {
+    //     noodles(["a.txt", "b.txt", "c.txt"]).map(function (file, next) {
     //         fs.readFile(file, "utf-8", function (err, data) {
     //             // Ignore errors for brevity.
     //             next(data);
@@ -135,10 +126,11 @@
     //     }, function (fileBodies) {
     //         ...
     //     });
-    function map (items, iterFn, callback) {
-        reduce(items, function (xs, x, next) {
+    function map (iterFn, callback) {
+        this.reduce(function (xs, x, next) {
             iterFn.call(x, x, function (res) {
-                next(xs.concat(res));
+                xs.push(res);
+                next(xs);
             });
         }, callback, []);
     }
@@ -146,8 +138,8 @@
     // Create a new array which consists of only each item in `items` for which
     // `testFn(item)` is truthy. The order of `items` and execution is
     // preserved.
-    function filter (items, testFn, callback) {
-        reduce(items, function (xs, x, next) {
+    function filter (testFn, callback) {
+        this.reduce(function (xs, x, next) {
             testFn.call(x, x, function (res) {
                 if (res) {
                     next(xs.concat(x));
@@ -169,7 +161,7 @@
     //
     // Example:
     //
-    //     noodles.forEach(someBigLongArray, function (item, index, next, exit) {
+    //     noodles(someBigLongArray).forEach(function (item, index, next, exit) {
     //         if ( someCondition(item) ) {
     //             exit();
     //         } else {
@@ -178,9 +170,9 @@
     //     }, function () {
     //         ...
     //     });
-    function forEach (items, iterFn, callback) {
-        var i = 0;
-        reduce(items, function (_, it, next, exit) {
+    function forEach (iterFn, callback) {
+        var i = 0, items = this.items;
+        this.reduce(function (_, it, next, exit) {
             iterFn.call(it, it, i++, next, exit);
         }, function () {
             callback.call(items, items);
@@ -209,21 +201,22 @@
     //     var faveSites = ["http://news.ycombinator.com",
     //                      "http://google.com/reader",
     //                      "http://nytimes.com"];
-    //     noodles.every(faveSites, siteIsUp, function (res) {
+    //     noodles(faveSites).every(siteIsUp, function (res) {
     //         if (res) {
     //             console.log("Time to waste time on the net...");
     //         } else {
     //             console.log("Oh noes! Not all of my fave sites are up!");
     //         }
     //     });
-    function every (items, testFn, callback) {
-        if ( arguments.length < 3) {
-            callback = testFn || function () {};
+    function every (testFn, callback) {
+        // Assume coercion to boolean for the `testFn` if only one function is passed.
+        if ( arguments.length === 1 ) {
+            callback = testFn;
             testFn = function (o, next) {
                 return next(!!o);
             };
         }
-        reduce(items, function (_, it, next, exit) {
+        this.reduce(function (_, it, next, exit) {
             testFn.call(it, it, function (res) {
                 if (res) {
                     next(true);
@@ -236,16 +229,17 @@
 
     // Does `iterFn(item)` return a truthy value for at least one item in
     // `items`?  Note that when the array is empty, there is no item in `items`
-    // for which `testFn(item)` is true and so the result of calling
-    // `noodles.some` on an empty array is false.
-    function some (items, testFn, callback) {
-        if ( arguments.length < 3) {
-            callback = testFn || function () {};
+    // for which `testFn(item)` is true and so the result of calling `some` on
+    // an empty array is false.
+    function some (testFn, callback) {
+        // Assume coercion to boolean if testFn is not provided.
+        if ( arguments.length === 1) {
+            callback = testFn;
             testFn = function (o, next) {
                 return next(!!o);
             };
         }
-        reduce(items, function (_, it, next, exit) {
+        this.reduce(function (_, it, next, exit) {
             testFn.call(it, it, function (res) {
                 if (res) {
                     exit(true);
@@ -256,37 +250,29 @@
         }, callback, false);
     }
 
-    function curry (fn) {
-        var args = slice.call(arguments, 1);
-        return function () {
-            return fn.apply(this, args.concat(slice.call(arguments)));
-        };
+    function Noodle (items) {
+        this.items = items;
     }
 
-    // Globally exposed function. Can access the functions like
-    // `noodles(items).map(...)` or like `noodles.map(items, ...)`.
+    // Globally exposed function.
     exports.noodles = function (items) {
-        return {
-            reduce: curry(reduce, items),
-            map: curry(map, items),
-            filter: curry(filter, items),
-            forEach: curry(forEach, items),
-            every: curry(every, items),
-            some: curry(some, items)
-        };
+        return new Noodle(items);
     };
 
-    exports.noodles.reduce = reduce;
-    exports.noodles.map = map;
-    exports.noodles.filter = filter;
-    exports.noodles.forEach = forEach;
-    exports.noodles.every = every;
-    exports.noodles.some = some;
+    exports.noodles.prototype = Noodle.prototype = {
+        reduce: reduce,
+        map: map,
+        filter: filter,
+        forEach: forEach,
+        every: every,
+        some: some
+    };
 
+    // Configuration values for the ms time lengths of the `async` timeout and
+    // batch processing respectively.
     exports.noodles.TIMEOUT = 15;
-
     exports.noodles.BATCH_TIME = 50;
 
 }(typeof exports === "object"
   ? exports
-  : window));
+  : this));
